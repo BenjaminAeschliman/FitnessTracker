@@ -1,6 +1,10 @@
 ﻿using FitnessTracker.DTOs;
 using FitnessTracker.Models;
 
+
+// Next step: replace with database + EF Core. Update service only
+
+
 namespace FitnessTracker.Services
 {
     public class FitnessService : IFitnessService

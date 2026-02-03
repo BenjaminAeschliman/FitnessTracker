@@ -30,8 +30,17 @@ namespace FitnessTracker.Controllers
     [HttpPost("activities")]
     public IActionResult AddActivity([FromBody] CreateActivityRequest request)
     {
-      var created = _fitnessService.AddActivity(request);
-      return Ok(created);
+
+      if (request == null)
+        return BadRequest("Request body is required.");
+      if (string.IsNullOrWhiteSpace(request.Type))
+        return BadRequest("Activity type is required.");
+      if (request.DurationMinutes <= 0)
+        return BadRequest("DurationMinutes must be greater than 0");
+
+      var activity = _fitnessService.AddActivity(request);
+
+      return CreatedAtAction(nameof(GetActivities), activity);
     }
   }
 }
