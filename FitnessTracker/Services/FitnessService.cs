@@ -1,38 +1,43 @@
-﻿using FitnessTracker.DTOs;
+﻿using FitnessTracker.Data;
+using FitnessTracker.DTOs;
 using FitnessTracker.Models;
-
-
-// Next step: replace with database + EF Core. Update service only
-
+using System.Linq;
 
 namespace FitnessTracker.Services
 {
     public class FitnessService : IFitnessService
     {
-        private static readonly List<Activity> _activities = new();
-        private static int _nextId = 1;
+        private readonly FitnessDbContext _db;
+
+        public FitnessService(FitnessDbContext db)
+        {
+            _db = db;
+        }
 
         public string GetStatus()
         {
-            return "Fitness service is working";
+            return "Fitness service is working (EF Core)";
         }
 
         public List<Activity> GetActivities()
         {
-            return _activities;
+            return _db.Activities
+                      .OrderByDescending(a => a.Date)
+                      .ToList();
         }
 
         public Activity AddActivity(CreateActivityRequest request)
         {
             var activity = new Activity
             {
-                Id = _nextId++,
                 Type = request.Type,
                 DurationMinutes = request.DurationMinutes,
                 Date = request.Date
             };
 
-            _activities.Add(activity);
+            _db.Activities.Add(activity);
+            _db.SaveChanges();
+
             return activity;
         }
     }
