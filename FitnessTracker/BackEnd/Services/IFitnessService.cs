@@ -12,5 +12,6 @@ namespace FitnessTracker.BackEnd.Services
         Activity AddActivity(int userId, CreateActivityRequest request);
         bool UpdateActivity(int userId, int id, CreateActivityRequest request);
         bool DeleteActivity(int userId, int id);
+        Task<FitnessStatsDto> GetStatsAsync(string userId, DateTime? startDate, DateTime? endDate);
     }
 }

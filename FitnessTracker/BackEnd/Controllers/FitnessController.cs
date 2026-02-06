@@ -1,5 +1,5 @@
-﻿using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Authorization;
+﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
 
 using FitnessTracker.BackEnd.DTOs;
@@ -20,10 +20,20 @@ namespace FitnessTracker.BackEnd.Controllers
             _fitnessService = fitnessService;
         }
 
-        private int GetUserId()
+        // Returns false instead of throwing (prevents random 500s)
+        private bool TryGetUserId(out int userId)
         {
-            var idValue = User.FindFirstValue(ClaimTypes.NameIdentifier);
-            return int.Parse(idValue!);
+            userId = 0;
+            var idValue = User.FindFirstValue(ClaimTypes.NameIdentifier)
+                         ?? User.FindFirstValue("sub"); // sometimes used in JWT
+
+            return int.TryParse(idValue, out userId);
+        }
+
+        private string? GetUserIdString()
+        {
+            return User.FindFirstValue(ClaimTypes.NameIdentifier)
+                ?? User.FindFirstValue("sub");
         }
 
         [AllowAnonymous]
@@ -39,20 +49,23 @@ namespace FitnessTracker.BackEnd.Controllers
             [FromQuery] DateTime? from,
             [FromQuery] DateTime? to)
         {
-            var userId = GetUserId();
-            var activities = _fitnessService.GetActivities(userId, type, from, to);
+            if (!TryGetUserId(out var userId))
+                return Unauthorized(new { error = "Missing or invalid user identity." });
 
+            var activities = _fitnessService.GetActivities(userId, type, from, to);
             return Ok(activities.Select(ToResponse));
         }
 
         [HttpGet("activities/{id}")]
         public IActionResult GetActivityById(int id)
         {
-            var userId = GetUserId();
+            if (!TryGetUserId(out var userId))
+                return Unauthorized(new { error = "Missing or invalid user identity." });
+
             var activity = _fitnessService.GetActivityById(userId, id);
 
             if (activity == null)
-                return NotFound($"Activity with ID {id} not found.");
+                return NotFound(new { error = $"Activity with ID {id} not found." });
 
             return Ok(ToResponse(activity));
         }
@@ -61,13 +74,17 @@ namespace FitnessTracker.BackEnd.Controllers
         public IActionResult AddActivity([FromBody] CreateActivityRequest request)
         {
             if (request == null)
-                return BadRequest("Request body is required.");
-            if (string.IsNullOrWhiteSpace(request.Type))
-                return BadRequest("Activity type is required.");
-            if (request.DurationMinutes <= 0)
-                return BadRequest("DurationMinutes must be greater than 0");
+                return BadRequest(new { error = "Request body is required." });
 
-            var userId = GetUserId();
+            if (!TryGetUserId(out var userId))
+                return Unauthorized(new { error = "Missing or invalid user identity." });
+
+            if (string.IsNullOrWhiteSpace(request.Type))
+                return BadRequest(new { error = "Activity type is required." });
+
+            if (request.DurationMinutes <= 0)
+                return BadRequest(new { error = "DurationMinutes must be greater than 0." });
+
             var activity = _fitnessService.AddActivity(userId, request);
 
             return CreatedAtAction(
@@ -81,17 +98,21 @@ namespace FitnessTracker.BackEnd.Controllers
         public IActionResult UpdateActivity(int id, [FromBody] CreateActivityRequest request)
         {
             if (request == null)
-                return BadRequest("Request body is required.");
-            if (string.IsNullOrWhiteSpace(request.Type))
-                return BadRequest("Activity type is required.");
-            if (request.DurationMinutes <= 0)
-                return BadRequest("DurationMinutes must be greater than 0");
+                return BadRequest(new { error = "Request body is required." });
 
-            var userId = GetUserId();
+            if (!TryGetUserId(out var userId))
+                return Unauthorized(new { error = "Missing or invalid user identity." });
+
+            if (string.IsNullOrWhiteSpace(request.Type))
+                return BadRequest(new { error = "Activity type is required." });
+
+            if (request.DurationMinutes <= 0)
+                return BadRequest(new { error = "DurationMinutes must be greater than 0." });
+
             var updated = _fitnessService.UpdateActivity(userId, id, request);
 
             if (!updated)
-                return NotFound($"Activity with ID {id} not found.");
+                return NotFound(new { error = $"Activity with ID {id} not found." });
 
             return NoContent();
         }
@@ -99,13 +120,32 @@ namespace FitnessTracker.BackEnd.Controllers
         [HttpDelete("activities/{id}")]
         public IActionResult DeleteActivity(int id)
         {
-            var userId = GetUserId();
+            if (!TryGetUserId(out var userId))
+                return Unauthorized(new { error = "Missing or invalid user identity." });
+
             var deleted = _fitnessService.DeleteActivity(userId, id);
 
             if (!deleted)
-                return NotFound($"Activity with ID {id} not found.");
+                return NotFound(new { error = $"Activity with ID {id} not found." });
 
             return NoContent();
+        }
+
+        [HttpGet("stats")]
+        public async Task<IActionResult> GetStats(
+            [FromQuery] DateTime? startDate,
+            [FromQuery] DateTime? endDate)
+        {
+            var userId = GetUserIdString();
+
+            if (string.IsNullOrWhiteSpace(userId))
+                return Unauthorized(new { error = "Missing user identity." });
+
+            if (startDate.HasValue && endDate.HasValue && endDate.Value.Date < startDate.Value.Date)
+                return BadRequest(new { error = "endDate must be on/after startDate." });
+
+            var stats = await _fitnessService.GetStatsAsync(userId, startDate, endDate);
+            return Ok(stats);
         }
 
         private static ActivityResponse ToResponse(Activity a)

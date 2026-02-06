@@ -4,6 +4,8 @@
     <meta charset="utf-8" />
     <title>FitnessTracker</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
     <h1>FitnessTracker</h1>
@@ -31,25 +33,64 @@
 
     <!-- LOGGED IN VIEW -->
     <div id="loggedInView" style="display:none;">
-        <h2>Activities</h2>
-
         <p>
             Logged in as: <strong id="currentUserEmail">unknown</strong>
             <button id="logoutBtn" type="button">Logout</button>
         </p>
 
-        <button id="loadActivitiesBtn" type="button">Load Activities</button>
-        <pre id="activitiesOutput"></pre>
+        <!-- STATS -->
+        <section class="card">
+            <h2>Stats</h2>
 
-        <h3>Add Activity</h3>
-        <form id="activityForm">
-            <input id="activityType" placeholder="Type (Run / Walk / Lift)" required />
-            <input id="activityMinutes" type="number" placeholder="Minutes" required />
-            <input id="activityDate" type="date" required />
-            <button type="submit">Add Activity</button>
-        </form>
+            <div class="row">
+                <input id="startDate" type="date" />
+                <input id="endDate" type="date" />
+                <button id="loadStatsBtn" type="button">Load Stats</button>
+            </div>
 
-        <pre id="activityResult"></pre>
+            <div id="statsLoading" class="hint" style="display:none;">Loading stats…</div>
+            <div id="statsError" class="error"></div>
+
+            <div id="statsSummary" class="stats-grid" style="display:none;">
+                <div class="stat"><span>Total Minutes</span><strong id="statTotal">0</strong></div>
+                <div class="stat"><span>Activities</span><strong id="statCount">0</strong></div>
+                <div class="stat"><span>Avg Duration</span><strong id="statAvg">0</strong></div>
+            </div>
+
+            <div id="typeBreakdown"></div>
+        </section>
+
+        <!-- ACTIVITIES -->
+        <section class="card">
+            <h2>Activities</h2>
+
+            <button id="loadActivitiesBtn" type="button">Load Activities</button>
+            <div id="activitiesLoading" class="hint" style="display:none;">Loading…</div>
+
+            <table id="activitiesTable" style="display:none;">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Type</th>
+                        <th>Minutes</th>
+                    </tr>
+                </thead>
+                <tbody id="activitiesBody"></tbody>
+            </table>
+        </section>
+
+        <!-- ADD -->
+        <section class="card">
+            <h3>Add Activity</h3>
+            <form id="activityForm">
+                <input id="activityType" placeholder="Type (Run / Walk / Lift)" required />
+                <input id="activityMinutes" type="number" placeholder="Minutes" required />
+                <input id="activityDate" type="date" required />
+                <button type="submit">Add Activity</button>
+            </form>
+
+            <pre id="activityResult"></pre>
+        </section>
     </div>
 
     <script src="app.js"></script>

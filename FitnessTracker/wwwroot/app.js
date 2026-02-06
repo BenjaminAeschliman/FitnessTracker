@@ -55,105 +55,185 @@ async function sendRequest(url, method, body, needsAuth) {
     }
 
     if (!response.ok) {
-        if (typeof data === "string" && data.length > 0) throw new Error(data);
-        throw new Error((data && data.message) ? data.message : (response.status + " " + response.statusText));
+        throw new Error(data?.error || data?.message || (typeof data === "string" ? data : "") || `${response.status} ${response.statusText}`);
     }
 
     return data;
 }
 
-// ---------- REGISTER ----------
-document.getElementById("registerForm").addEventListener("submit", async (e) => {
-    e.preventDefault();
+// ---------- Activities ----------
+async function loadActivities() {
+    const loading = document.getElementById("activitiesLoading");
+    const tbody = document.getElementById("activitiesBody");
+    const table = document.getElementById("activitiesTable");
 
-    const email = document.getElementById("registerEmail").value;
-    const password = document.getElementById("registerPassword").value;
-
-    try {
-        await sendRequest("/auth/register", "POST", { email, password }, false);
-        setMessage("Registered successfully. Now log in.");
-        e.target.reset();
-    } catch (err) {
-        setMessage("Register failed: " + err.message);
-    }
-});
-
-// ---------- LOGIN ----------
-document.getElementById("loginForm").addEventListener("submit", async (e) => {
-    e.preventDefault();
-
-    const email = document.getElementById("loginEmail").value;
-    const password = document.getElementById("loginPassword").value;
+    loading.style.display = "block";
+    tbody.innerHTML = "";
+    table.style.display = "none";
 
     try {
-        const result = await sendRequest("/auth/login", "POST", { email, password }, false);
+        const activities = await sendRequest("/api/fitness/activities", "GET", null, true);
 
-        const token = result?.token || result?.Token;
-        if (!token) throw new Error("No token returned from server");
+        for (const a of activities) {
+            const tr = document.createElement("tr");
+            tr.innerHTML = `
+                <td>${(a.date || "").toString().substring(0, 10)}</td>
+                <td>${a.type ?? ""}</td>
+                <td>${a.durationMinutes ?? ""}</td>
+            `;
+            tbody.appendChild(tr);
+        }
 
-        saveToken(token);
-        saveEmail(email);
-
-        setLoggedInUI(true);
-        setMessage("Logged in.");
-        e.target.reset();
-    } catch (err) {
-        setMessage("Login failed: " + err.message);
-    }
-});
-
-// ---------- LOGOUT ----------
-document.getElementById("logoutBtn").addEventListener("click", () => {
-    clearToken();
-    setLoggedInUI(false);
-    document.getElementById("activitiesOutput").textContent = "";
-    document.getElementById("activityResult").textContent = "";
-    setMessage("Logged out.");
-});
-
-// ---------- LOAD ACTIVITIES ----------
-document.getElementById("loadActivitiesBtn").addEventListener("click", async () => {
-    const output = document.getElementById("activitiesOutput");
-    output.textContent = "Loading...";
-
-    try {
-        const data = await sendRequest("/api/fitness/activities", "GET", null, true);
-        output.textContent = JSON.stringify(data, null, 2);
+        table.style.display = activities.length ? "table" : "none";
         setMessage("");
     } catch (err) {
-        output.textContent = "";
         setMessage("Failed to load activities: " + err.message);
+    } finally {
+        loading.style.display = "none";
     }
-});
+}
 
-// ---------- ADD ACTIVITY ----------
-document.getElementById("activityForm").addEventListener("submit", async (e) => {
-    e.preventDefault();
+// ---------- Stats ----------
+async function loadStats() {
+    const statsLoading = document.getElementById("statsLoading");
+    const statsError = document.getElementById("statsError");
+    const statsSummary = document.getElementById("statsSummary");
+    const breakdown = document.getElementById("typeBreakdown");
 
-    const type = document.getElementById("activityType").value;
-    const durationMinutes = Number(document.getElementById("activityMinutes").value);
-    const date = document.getElementById("activityDate").value;
+    statsError.textContent = "";
+    statsLoading.style.display = "block";
+    statsSummary.style.display = "none";
+    breakdown.innerHTML = "";
 
-    const resultBox = document.getElementById("activityResult");
-    resultBox.textContent = "Saving...";
+    const start = document.getElementById("startDate").value;
+    const end = document.getElementById("endDate").value;
+
+    const params = new URLSearchParams();
+    if (start) params.append("startDate", start);
+    if (end) params.append("endDate", end);
 
     try {
-        const data = await sendRequest(
-            "/api/fitness/activities",
-            "POST",
-            { type, durationMinutes, date },
+        const stats = await sendRequest(
+            "/api/fitness/stats" + (params.toString() ? "?" + params.toString() : ""),
+            "GET",
+            null,
             true
         );
 
-        resultBox.textContent = JSON.stringify(data, null, 2);
-        setMessage("Activity added.");
-        e.target.reset();
+        document.getElementById("statTotal").textContent = stats.totalMinutes ?? 0;
+        document.getElementById("statCount").textContent = stats.activityCount ?? 0;
+        document.getElementById("statAvg").textContent = stats.averageDurationMinutes ?? 0;
+
+        statsSummary.style.display = "grid";
+
+        const dict = stats.minutesByType || {};
+        const keys = Object.keys(dict);
+
+        if (keys.length === 0) {
+            breakdown.textContent = "No activity types for this range.";
+        } else {
+            for (const type of keys) {
+                const div = document.createElement("div");
+                div.textContent = `${type}: ${dict[type]} min`;
+                breakdown.appendChild(div);
+            }
+        }
     } catch (err) {
-        resultBox.textContent = "";
-        setMessage("Failed to add activity: " + err.message);
+        statsError.textContent = err.message;
+    } finally {
+        statsLoading.style.display = "none";
+    }
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+    setMessage("✅ app.js loaded and DOMContentLoaded fired");
+
+    // REGISTER
+    document.getElementById("registerForm").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const email = document.getElementById("registerEmail").value;
+        const password = document.getElementById("registerPassword").value;
+
+        try {
+            await sendRequest("/auth/register", "POST", { email, password }, false);
+            setMessage("✅ Registered successfully. Now log in.");
+            e.target.reset();
+        } catch (err) {
+            setMessage("❌ Register failed: " + err.message);
+        }
+    });
+
+    // LOGIN
+    document.getElementById("loginForm").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const email = document.getElementById("loginEmail").value;
+        const password = document.getElementById("loginPassword").value;
+
+        try {
+            const result = await sendRequest("/auth/login", "POST", { email, password }, false);
+            const token = result?.token || result?.Token;
+            if (!token) throw new Error("No token returned from server.");
+
+            saveToken(token);
+            saveEmail(email);
+            setLoggedInUI(true);
+            setMessage("✅ Logged in.");
+            e.target.reset();
+
+            // auto-load
+            loadActivities();
+            loadStats();
+        } catch (err) {
+            setMessage("❌ Login failed: " + err.message);
+        }
+    });
+
+    // LOGOUT
+    document.getElementById("logoutBtn").addEventListener("click", () => {
+        clearToken();
+        setLoggedInUI(false);
+        setMessage("Logged out.");
+    });
+
+    // BUTTONS
+    document.getElementById("loadActivitiesBtn").addEventListener("click", loadActivities);
+    document.getElementById("loadStatsBtn").addEventListener("click", loadStats);
+
+    // ADD ACTIVITY (prevents refresh)
+    document.getElementById("activityForm").addEventListener("submit", async (e) => {
+        e.preventDefault();
+
+        const type = document.getElementById("activityType").value;
+        const durationMinutes = Number(document.getElementById("activityMinutes").value);
+        const date = document.getElementById("activityDate").value;
+
+        const resultBox = document.getElementById("activityResult");
+        resultBox.textContent = "Saving...";
+
+        try {
+            const data = await sendRequest(
+                "/api/fitness/activities",
+                "POST",
+                { type, durationMinutes, date },
+                true
+            );
+
+            resultBox.textContent = JSON.stringify(data, null, 2);
+            setMessage("✅ Activity added.");
+            e.target.reset();
+
+            loadActivities();
+            loadStats();
+        } catch (err) {
+            resultBox.textContent = "";
+            setMessage("❌ Failed to add activity: " + err.message);
+        }
+    });
+
+    // PAGE LOAD
+    setLoggedInUI(!!getToken());
+    if (getToken()) {
+        loadActivities();
+        loadStats();
     }
 });
-
-// ---------- PAGE LOAD ----------
-setLoggedInUI(!!getToken());
-setMessage(getToken() ? "Token found. You are logged in." : "Not logged in.");
