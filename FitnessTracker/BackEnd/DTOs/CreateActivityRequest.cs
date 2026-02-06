@@ -1,8 +1,7 @@
-﻿namespace FitnessTracker.Models
+﻿namespace FitnessTracker.BackEnd.DTOs
 {
-  public class Activity
+  public class CreateActivityRequest
   {
-    public int Id { get; set; }
     public string Type { get; set; } = "";
     public int DurationMinutes { get; set; }
     public DateTime Date { get; set; }

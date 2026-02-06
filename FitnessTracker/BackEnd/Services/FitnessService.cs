@@ -1,9 +1,8 @@
-﻿using FitnessTracker.Data;
-using FitnessTracker.DTOs;
-using FitnessTracker.Models;
-using System.Linq;
+﻿using FitnessTracker.BackEnd.Data;
+using FitnessTracker.BackEnd.DTOs;
+using FitnessTracker.BackEnd.Models;
 
-namespace FitnessTracker.Services
+namespace FitnessTracker.BackEnd.Services
 {
     public class FitnessService : IFitnessService
     {
@@ -14,20 +13,14 @@ namespace FitnessTracker.Services
             _db = db;
         }
 
-        public string GetStatus()
-        {
-            return "Fitness service is working (EF Core)";
-        }
+        public string GetStatus() => "Fitness service is working";
 
-        public List<Activity> GetActivities(string? type = null, DateTime? from = null, DateTime? to = null)
+        public List<Activity> GetActivities(int userId, string? type, DateTime? from, DateTime? to)
         {
-            var query = _db.Activities.AsQueryable();
+            IQueryable<Activity> query = _db.Activities.Where(a => a.UserId == userId);
 
             if (!string.IsNullOrWhiteSpace(type))
-            {
-                var trimmed = type.Trim();
-                query = query.Where(a => a.Type == trimmed);
-            }
+                query = query.Where(a => a.Type == type);
 
             if (from.HasValue)
                 query = query.Where(a => a.Date >= from.Value);
@@ -40,18 +33,19 @@ namespace FitnessTracker.Services
                 .ToList();
         }
 
-        public Activity? GetActivityById(int id)
+        public Activity? GetActivityById(int userId, int id)
         {
-            return _db.Activities.Find(id);
+            return _db.Activities.FirstOrDefault(a => a.Id == id && a.UserId == userId);
         }
 
-        public Activity AddActivity(CreateActivityRequest request)
+        public Activity AddActivity(int userId, CreateActivityRequest request)
         {
             var activity = new Activity
             {
                 Type = request.Type,
                 DurationMinutes = request.DurationMinutes,
-                Date = request.Date
+                Date = request.Date,
+                UserId = userId
             };
 
             _db.Activities.Add(activity);
@@ -60,11 +54,10 @@ namespace FitnessTracker.Services
             return activity;
         }
 
-        public bool UpdateActivity(int id, CreateActivityRequest request)
+        public bool UpdateActivity(int userId, int id, CreateActivityRequest request)
         {
-            var activity = _db.Activities.Find(id);
-            if (activity == null)
-                return false;
+            var activity = _db.Activities.FirstOrDefault(a => a.Id == id && a.UserId == userId);
+            if (activity == null) return false;
 
             activity.Type = request.Type;
             activity.DurationMinutes = request.DurationMinutes;
@@ -74,11 +67,10 @@ namespace FitnessTracker.Services
             return true;
         }
 
-        public bool DeleteActivity(int id)
+        public bool DeleteActivity(int userId, int id)
         {
-            var activity = _db.Activities.Find(id);
-            if (activity == null)
-                return false;
+            var activity = _db.Activities.FirstOrDefault(a => a.Id == id && a.UserId == userId);
+            if (activity == null) return false;
 
             _db.Activities.Remove(activity);
             _db.SaveChanges();

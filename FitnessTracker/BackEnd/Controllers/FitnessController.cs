@@ -1,10 +1,14 @@
 ﻿using Microsoft.AspNetCore.Mvc;
-using FitnessTracker.Services;
-using FitnessTracker.DTOs;
-using FitnessTracker.Models;
+using Microsoft.AspNetCore.Authorization;
+using System.Security.Claims;
 
-namespace FitnessTracker.Controllers
+using FitnessTracker.BackEnd.DTOs;
+using FitnessTracker.BackEnd.Models;
+using FitnessTracker.BackEnd.Services;
+
+namespace FitnessTracker.BackEnd.Controllers
 {
+    [Authorize]
     [ApiController]
     [Route("api/[controller]")]
     public class FitnessController : ControllerBase
@@ -16,26 +20,37 @@ namespace FitnessTracker.Controllers
             _fitnessService = fitnessService;
         }
 
+        private int GetUserId()
+        {
+            var idValue = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            return int.Parse(idValue!);
+        }
+
+        [AllowAnonymous]
         [HttpGet("status")]
         public IActionResult Status()
         {
             return Ok(_fitnessService.GetStatus());
         }
 
-        // GET /api/fitness/activities?type=Run&from=2026-02-01&to=2026-02-28
         [HttpGet("activities")]
-        public IActionResult GetActivities([FromQuery] string? type, [FromQuery] DateTime? from, [FromQuery] DateTime? to)
+        public IActionResult GetActivities(
+            [FromQuery] string? type,
+            [FromQuery] DateTime? from,
+            [FromQuery] DateTime? to)
         {
-            var activities = _fitnessService.GetActivities(type, from, to);
+            var userId = GetUserId();
+            var activities = _fitnessService.GetActivities(userId, type, from, to);
 
-            var response = activities.Select(ToResponse).ToList();
-            return Ok(response);
+            return Ok(activities.Select(ToResponse));
         }
 
         [HttpGet("activities/{id}")]
         public IActionResult GetActivityById(int id)
         {
-            var activity = _fitnessService.GetActivityById(id);
+            var userId = GetUserId();
+            var activity = _fitnessService.GetActivityById(userId, id);
+
             if (activity == null)
                 return NotFound($"Activity with ID {id} not found.");
 
@@ -52,9 +67,14 @@ namespace FitnessTracker.Controllers
             if (request.DurationMinutes <= 0)
                 return BadRequest("DurationMinutes must be greater than 0");
 
-            var activity = _fitnessService.AddActivity(request);
+            var userId = GetUserId();
+            var activity = _fitnessService.AddActivity(userId, request);
 
-            return CreatedAtAction(nameof(GetActivityById), new { id = activity.Id }, ToResponse(activity));
+            return CreatedAtAction(
+                nameof(GetActivityById),
+                new { id = activity.Id },
+                ToResponse(activity)
+            );
         }
 
         [HttpPut("activities/{id}")]
@@ -67,7 +87,9 @@ namespace FitnessTracker.Controllers
             if (request.DurationMinutes <= 0)
                 return BadRequest("DurationMinutes must be greater than 0");
 
-            var updated = _fitnessService.UpdateActivity(id, request);
+            var userId = GetUserId();
+            var updated = _fitnessService.UpdateActivity(userId, id, request);
+
             if (!updated)
                 return NotFound($"Activity with ID {id} not found.");
 
@@ -77,7 +99,9 @@ namespace FitnessTracker.Controllers
         [HttpDelete("activities/{id}")]
         public IActionResult DeleteActivity(int id)
         {
-            var deleted = _fitnessService.DeleteActivity(id);
+            var userId = GetUserId();
+            var deleted = _fitnessService.DeleteActivity(userId, id);
+
             if (!deleted)
                 return NotFound($"Activity with ID {id} not found.");
 

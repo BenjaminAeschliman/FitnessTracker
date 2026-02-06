@@ -1,4 +1,4 @@
-﻿namespace FitnessTracker.DTOs
+﻿namespace FitnessTracker.BackEnd.DTOs
 {
     public class ActivityResponse
     {

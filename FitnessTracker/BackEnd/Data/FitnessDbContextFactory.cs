@@ -2,7 +2,7 @@
 using Microsoft.EntityFrameworkCore.Design;
 using Microsoft.Extensions.Configuration;
 
-namespace FitnessTracker.Data
+namespace FitnessTracker.BackEnd.Data
 {
     public class FitnessDbContextFactory : IDesignTimeDbContextFactory<FitnessDbContext>
     {
