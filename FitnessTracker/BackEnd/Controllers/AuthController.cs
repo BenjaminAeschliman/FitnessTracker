@@ -5,12 +5,14 @@ using System.Text;
 using FitnessTracker.BackEnd.Data;
 using FitnessTracker.BackEnd.DTOs;
 using FitnessTracker.BackEnd.Models;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 
 namespace FitnessTracker.BackEnd.Controllers
 {
+    [AllowAnonymous]
     [ApiController]
     [Route("auth")]
     public class AuthController : ControllerBase
@@ -25,18 +27,22 @@ namespace FitnessTracker.BackEnd.Controllers
         }
 
         [HttpPost("register")]
-        public async Task<IActionResult> Register([FromBody] RegisterRequest request)
+        public async Task<IActionResult> Register([FromBody] RegisterRequest request, CancellationToken ct)
         {
-            var email = (request.Email ?? "").Trim().ToLower();
+            if (request == null)
+                return BadRequest(new { error = "Request body is required." });
 
-            if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(request.Password))
-                return BadRequest("Email and password are required.");
+            var email = (request.Email ?? "").Trim().ToLowerInvariant();
+            var password = request.Password ?? "";
 
-            var exists = await _db.Users.AnyAsync(u => u.Email == email);
+            if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(password))
+                return BadRequest(new { error = "Email and password are required." });
+
+            var exists = await _db.Users.AnyAsync(u => u.Email == email, ct);
             if (exists)
-                return BadRequest("Email is already registered.");
+                return BadRequest(new { error = "Email is already registered." });
 
-            CreatePasswordHash(request.Password, out var hash, out var salt);
+            CreatePasswordHash(password, out var hash, out var salt);
 
             var user = new AppUser
             {
@@ -46,27 +52,32 @@ namespace FitnessTracker.BackEnd.Controllers
             };
 
             _db.Users.Add(user);
-            await _db.SaveChangesAsync();
+            await _db.SaveChangesAsync(ct);
 
-            return Ok();
+            return Ok(new { message = "Registered successfully." });
         }
 
         [HttpPost("login")]
-        public async Task<ActionResult<AuthResponse>> Login([FromBody] LoginRequest request)
+        public async Task<IActionResult> Login([FromBody] LoginRequest request, CancellationToken ct)
         {
-            var email = (request.Email ?? "").Trim().ToLower();
+            if (request == null)
+                return BadRequest(new { error = "Request body is required." });
 
-            var user = await _db.Users.FirstOrDefaultAsync(u => u.Email == email);
+            var email = (request.Email ?? "").Trim().ToLowerInvariant();
+            var password = request.Password ?? "";
+
+            if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(password))
+                return BadRequest(new { error = "Email and password are required." });
+
+            var user = await _db.Users.FirstOrDefaultAsync(u => u.Email == email, ct);
             if (user == null)
-                return Unauthorized("Invalid credentials.");
+                return Unauthorized(new { error = "Invalid credentials." });
 
-            var valid = VerifyPasswordHash(request.Password, user.PasswordHash, user.PasswordSalt);
-            if (!valid)
-                return Unauthorized("Invalid credentials.");
+            if (!VerifyPasswordHash(password, user.PasswordHash, user.PasswordSalt))
+                return Unauthorized(new { error = "Invalid credentials." });
 
             var token = CreateJwtToken(user);
-
-            return Ok(new AuthResponse { Token = token });
+            return Ok(new { token });
         }
 
         private string CreateJwtToken(AppUser user)

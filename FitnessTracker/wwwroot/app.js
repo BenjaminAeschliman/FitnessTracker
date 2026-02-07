@@ -1,8 +1,9 @@
 ﻿const API_BASE = "";
 
-// ---------- helpers ----------
+// ---------- UI helpers ----------
 function setMessage(text, isError = false) {
     const el = document.getElementById("message");
+    if (!el) return;
     el.textContent = text || "";
     el.classList.toggle("error", !!isError);
 }
@@ -29,9 +30,22 @@ function getEmail() {
 }
 
 function setLoggedInUI(isLoggedIn) {
-    document.getElementById("loggedOutView").style.display = isLoggedIn ? "none" : "block";
-    document.getElementById("loggedInView").style.display = isLoggedIn ? "block" : "none";
-    document.getElementById("currentUserEmail").textContent = getEmail() || "unknown";
+    const loggedOut = document.getElementById("loggedOutView");
+    const loggedIn = document.getElementById("loggedInView");
+    const currentEmail = document.getElementById("currentUserEmail");
+
+    if (loggedOut) loggedOut.style.display = isLoggedIn ? "none" : "block";
+    if (loggedIn) loggedIn.style.display = isLoggedIn ? "block" : "none";
+    if (currentEmail) currentEmail.textContent = getEmail() || "unknown";
+}
+
+// Send YYYY-MM-DD as ISO to avoid locale parsing differences across browsers
+function toIsoDateStart(yyyyMmDd) {
+    return yyyyMmDd ? new Date(yyyyMmDd + "T00:00:00").toISOString() : "";
+}
+
+function toIsoDateEnd(yyyyMmDd) {
+    return yyyyMmDd ? new Date(yyyyMmDd + "T23:59:59.999").toISOString() : "";
 }
 
 async function sendRequest(url, method, body, needsAuth) {
@@ -44,7 +58,7 @@ async function sendRequest(url, method, body, needsAuth) {
     }
 
     const options = { method, headers };
-    if (body) options.body = JSON.stringify(body);
+    if (body !== null && body !== undefined) options.body = JSON.stringify(body);
 
     const response = await fetch(API_BASE + url, options);
 
@@ -69,17 +83,42 @@ async function sendRequest(url, method, body, needsAuth) {
     return data;
 }
 
+// ---------- Activity Types ----------
+async function loadActivityTypes() {
+    const sel = document.getElementById("activityFilterType");
+    if (!sel) return;
+
+    const current = sel.value || "";
+
+    try {
+        const types = await sendRequest("/api/fitness/activity-types", "GET", null, true);
+
+        sel.innerHTML = `<option value="">All</option>`;
+        for (const t of (types || [])) {
+            const opt = document.createElement("option");
+            opt.value = t;
+            opt.textContent = t;
+            sel.appendChild(opt);
+        }
+
+        sel.value = current; // restore selection if still present
+    } catch (err) {
+        console.warn("Failed to load activity types:", err.message);
+    }
+}
+
 // ---------- Activities ----------
 async function loadActivities() {
     const loading = document.getElementById("activitiesLoading");
     const tbody = document.getElementById("activitiesBody");
     const table = document.getElementById("activitiesTable");
 
+    if (!loading || !tbody || !table) return;
+
     loading.style.display = "block";
     tbody.innerHTML = "";
     table.style.display = "none";
 
-    // Ensure empty-state element exists
     let empty = document.getElementById("activitiesEmpty");
     if (!empty) {
         empty = document.createElement("div");
@@ -91,8 +130,19 @@ async function loadActivities() {
     empty.style.display = "none";
     empty.textContent = "";
 
+    const start = document.getElementById("startDate")?.value || "";
+    const end = document.getElementById("endDate")?.value || "";
+    const type = document.getElementById("activityFilterType")?.value || "";
+
+    const params = new URLSearchParams();
+    if (type) params.append("type", type);
+    if (start) params.append("from", toIsoDateStart(start));
+    if (end) params.append("to", toIsoDateEnd(end));
+
+    const url = "/api/fitness/activities" + (params.toString() ? "?" + params.toString() : "");
+
     try {
-        const activities = await sendRequest("/api/fitness/activities", "GET", null, true);
+        const activities = await sendRequest(url, "GET", null, true);
 
         if (!activities || activities.length === 0) {
             empty.textContent = "No activities found.";
@@ -132,17 +182,19 @@ async function loadStats() {
     const statsSummary = document.getElementById("statsSummary");
     const breakdown = document.getElementById("typeBreakdown");
 
+    if (!statsLoading || !statsError || !statsSummary || !breakdown) return;
+
     statsError.textContent = "";
     statsLoading.style.display = "block";
     statsSummary.style.display = "none";
     breakdown.innerHTML = "";
 
-    const start = document.getElementById("startDate").value;
-    const end = document.getElementById("endDate").value;
+    const start = document.getElementById("startDate")?.value || "";
+    const end = document.getElementById("endDate")?.value || "";
 
     const params = new URLSearchParams();
-    if (start) params.append("startDate", start);
-    if (end) params.append("endDate", end);
+    if (start) params.append("startDate", toIsoDateStart(start));
+    if (end) params.append("endDate", toIsoDateEnd(end));
 
     try {
         const stats = await sendRequest(
@@ -164,9 +216,9 @@ async function loadStats() {
         if (keys.length === 0) {
             breakdown.innerHTML = `<div class="muted">No activity types for this range.</div>`;
         } else {
-            for (const type of keys) {
+            for (const t of keys) {
                 const div = document.createElement("div");
-                div.textContent = `${type}: ${dict[type]} min`;
+                div.textContent = `${t}: ${dict[t]} min`;
                 breakdown.appendChild(div);
             }
         }
@@ -185,12 +237,10 @@ async function loadStats() {
     }
 }
 
-
 // ---------- DOM ----------
 document.addEventListener("DOMContentLoaded", () => {
-
-    // REGISTER
-    document.getElementById("registerForm").addEventListener("submit", async (e) => {
+    // Register
+    document.getElementById("registerForm")?.addEventListener("submit", async (e) => {
         e.preventDefault();
 
         const email = document.getElementById("registerEmail").value;
@@ -205,8 +255,8 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     });
 
-    // LOGIN
-    document.getElementById("loginForm").addEventListener("submit", async (e) => {
+    // Login
+    document.getElementById("loginForm")?.addEventListener("submit", async (e) => {
         e.preventDefault();
 
         const email = document.getElementById("loginEmail").value;
@@ -223,26 +273,41 @@ document.addEventListener("DOMContentLoaded", () => {
             setMessage("Logged in.");
             e.target.reset();
 
-            loadActivities();
-            loadStats();
+            await loadActivityTypes();
+            await loadActivities();
+            await loadStats();
         } catch (err) {
             setMessage("Login failed: " + err.message, true);
         }
     });
 
-    // LOGOUT
-    document.getElementById("logoutBtn").addEventListener("click", () => {
+    // Logout
+    document.getElementById("logoutBtn")?.addEventListener("click", () => {
         clearToken();
         setLoggedInUI(false);
         setMessage("Logged out.");
     });
 
-    // BUTTONS
-    document.getElementById("loadActivitiesBtn").addEventListener("click", loadActivities);
-    document.getElementById("loadStatsBtn").addEventListener("click", loadStats);
+    // Actions
+    document.getElementById("loadActivitiesBtn")?.addEventListener("click", loadActivities);
+    document.getElementById("loadStatsBtn")?.addEventListener("click", loadStats);
 
-    // ADD ACTIVITY
-    document.getElementById("activityForm").addEventListener("submit", async (e) => {
+    document.getElementById("clearFiltersBtn")?.addEventListener("click", async () => {
+        const start = document.getElementById("startDate");
+        const end = document.getElementById("endDate");
+        const typeSel = document.getElementById("activityFilterType");
+
+        if (start) start.value = "";
+        if (end) end.value = "";
+        if (typeSel) typeSel.value = "";
+
+        await loadActivityTypes();
+        await loadActivities();
+        await loadStats();
+    });
+
+    // Add activity
+    document.getElementById("activityForm")?.addEventListener("submit", async (e) => {
         e.preventDefault();
 
         const type = document.getElementById("activityType").value;
@@ -250,24 +315,20 @@ document.addEventListener("DOMContentLoaded", () => {
         const date = document.getElementById("activityDate").value;
 
         const resultBox = document.getElementById("activityResult");
-        resultBox.textContent = "Saving...";
+        if (resultBox) resultBox.textContent = "Saving...";
 
         try {
-            await sendRequest(
-                "/api/fitness/activities",
-                "POST",
-                { type, durationMinutes, date },
-                true
-            );
+            await sendRequest("/api/fitness/activities", "POST", { type, durationMinutes, date }, true);
 
-            resultBox.textContent = "";
+            if (resultBox) resultBox.textContent = "";
             setMessage("Activity added.");
             e.target.reset();
 
-            loadActivities();
-            loadStats();
+            await loadActivityTypes();
+            await loadActivities();
+            await loadStats();
         } catch (err) {
-            resultBox.textContent = "";
+            if (resultBox) resultBox.textContent = "";
             setMessage("Failed to add activity: " + err.message, true);
 
             if (err.message === "Not logged in") {
@@ -277,10 +338,13 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     });
 
-    // INITIAL LOAD
+    // Initial load
     setLoggedInUI(!!getToken());
     if (getToken()) {
-        loadActivities();
-        loadStats();
+        (async () => {
+            await loadActivityTypes();
+            await loadActivities();
+            await loadStats();
+        })();
     }
 });

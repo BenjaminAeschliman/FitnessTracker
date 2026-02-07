@@ -7,11 +7,14 @@ namespace FitnessTracker.BackEnd.Services
     {
         string GetStatus();
 
-        List<Activity> GetActivities(int userId, string? type, DateTime? from, DateTime? to);
-        Activity? GetActivityById(int userId, int id);
-        Activity AddActivity(int userId, CreateActivityRequest request);
-        bool UpdateActivity(int userId, int id, CreateActivityRequest request);
-        bool DeleteActivity(int userId, int id);
-        Task<FitnessStatsDto> GetStatsAsync(string userId, DateTime? startDate, DateTime? endDate);
+        Task<List<Activity>> GetActivitiesAsync(int userId, string? type, DateTime? from, DateTime? to, CancellationToken ct);
+        Task<Activity?> GetActivityByIdAsync(int userId, int id, CancellationToken ct);
+
+        Task<Activity> AddActivityAsync(int userId, CreateActivityRequest request, CancellationToken ct);
+        Task<bool> UpdateActivityAsync(int userId, int id, CreateActivityRequest request, CancellationToken ct);
+        Task<bool> DeleteActivityAsync(int userId, int id, CancellationToken ct);
+
+        Task<FitnessStatsDto> GetStatsAsync(int userId, DateTime? startDate, DateTime? endDate, CancellationToken ct);
+        Task<List<string>> GetActivityTypesAsync(int userId, CancellationToken ct);
     }
 }

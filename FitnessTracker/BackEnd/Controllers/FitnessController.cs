@@ -1,10 +1,9 @@
-﻿using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Mvc;
-using System.Security.Claims;
-
+﻿using System.Security.Claims;
 using FitnessTracker.BackEnd.DTOs;
 using FitnessTracker.BackEnd.Models;
 using FitnessTracker.BackEnd.Services;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 
 namespace FitnessTracker.BackEnd.Controllers
 {
@@ -20,58 +19,48 @@ namespace FitnessTracker.BackEnd.Controllers
             _fitnessService = fitnessService;
         }
 
-        // Returns false instead of throwing (prevents random 500s)
         private bool TryGetUserId(out int userId)
         {
             userId = 0;
+
             var idValue = User.FindFirstValue(ClaimTypes.NameIdentifier)
-                         ?? User.FindFirstValue("sub"); // sometimes used in JWT
+                         ?? User.FindFirstValue("sub");
 
             return int.TryParse(idValue, out userId);
         }
 
-        private string? GetUserIdString()
-        {
-            return User.FindFirstValue(ClaimTypes.NameIdentifier)
-                ?? User.FindFirstValue("sub");
-        }
-
         [AllowAnonymous]
         [HttpGet("status")]
-        public IActionResult Status()
-        {
-            return Ok(_fitnessService.GetStatus());
-        }
+        public IActionResult Status() => Ok(_fitnessService.GetStatus());
 
         [HttpGet("activities")]
-        public IActionResult GetActivities(
+        public async Task<IActionResult> GetActivities(
             [FromQuery] string? type,
             [FromQuery] DateTime? from,
-            [FromQuery] DateTime? to)
+            [FromQuery] DateTime? to,
+            CancellationToken ct)
         {
             if (!TryGetUserId(out var userId))
                 return Unauthorized(new { error = "Missing or invalid user identity." });
 
-            var activities = _fitnessService.GetActivities(userId, type, from, to);
+            var activities = await _fitnessService.GetActivitiesAsync(userId, type, from, to, ct);
             return Ok(activities.Select(ToResponse));
         }
 
-        [HttpGet("activities/{id}")]
-        public IActionResult GetActivityById(int id)
+        [HttpGet("activities/{id:int}")]
+        public async Task<IActionResult> GetActivityById(int id, CancellationToken ct)
         {
             if (!TryGetUserId(out var userId))
                 return Unauthorized(new { error = "Missing or invalid user identity." });
 
-            var activity = _fitnessService.GetActivityById(userId, id);
-
-            if (activity == null)
-                return NotFound(new { error = $"Activity with ID {id} not found." });
-
-            return Ok(ToResponse(activity));
+            var activity = await _fitnessService.GetActivityByIdAsync(userId, id, ct);
+            return activity == null
+                ? NotFound(new { error = $"Activity with ID {id} not found." })
+                : Ok(ToResponse(activity));
         }
 
         [HttpPost("activities")]
-        public IActionResult AddActivity([FromBody] CreateActivityRequest request)
+        public async Task<IActionResult> AddActivity([FromBody] CreateActivityRequest request, CancellationToken ct)
         {
             if (request == null)
                 return BadRequest(new { error = "Request body is required." });
@@ -85,7 +74,7 @@ namespace FitnessTracker.BackEnd.Controllers
             if (request.DurationMinutes <= 0)
                 return BadRequest(new { error = "DurationMinutes must be greater than 0." });
 
-            var activity = _fitnessService.AddActivity(userId, request);
+            var activity = await _fitnessService.AddActivityAsync(userId, request, ct);
 
             return CreatedAtAction(
                 nameof(GetActivityById),
@@ -94,8 +83,8 @@ namespace FitnessTracker.BackEnd.Controllers
             );
         }
 
-        [HttpPut("activities/{id}")]
-        public IActionResult UpdateActivity(int id, [FromBody] CreateActivityRequest request)
+        [HttpPut("activities/{id:int}")]
+        public async Task<IActionResult> UpdateActivity(int id, [FromBody] CreateActivityRequest request, CancellationToken ct)
         {
             if (request == null)
                 return BadRequest(new { error = "Request body is required." });
@@ -109,54 +98,61 @@ namespace FitnessTracker.BackEnd.Controllers
             if (request.DurationMinutes <= 0)
                 return BadRequest(new { error = "DurationMinutes must be greater than 0." });
 
-            var updated = _fitnessService.UpdateActivity(userId, id, request);
-
-            if (!updated)
-                return NotFound(new { error = $"Activity with ID {id} not found." });
-
-            return NoContent();
+            var updated = await _fitnessService.UpdateActivityAsync(userId, id, request, ct);
+            return updated
+                ? NoContent()
+                : NotFound(new { error = $"Activity with ID {id} not found." });
         }
 
-        [HttpDelete("activities/{id}")]
-        public IActionResult DeleteActivity(int id)
+        [HttpDelete("activities/{id:int}")]
+        public async Task<IActionResult> DeleteActivity(int id, CancellationToken ct)
         {
             if (!TryGetUserId(out var userId))
                 return Unauthorized(new { error = "Missing or invalid user identity." });
 
-            var deleted = _fitnessService.DeleteActivity(userId, id);
-
-            if (!deleted)
-                return NotFound(new { error = $"Activity with ID {id} not found." });
-
-            return NoContent();
+            var deleted = await _fitnessService.DeleteActivityAsync(userId, id, ct);
+            return deleted
+                ? NoContent()
+                : NotFound(new { error = $"Activity with ID {id} not found." });
         }
 
         [HttpGet("stats")]
         public async Task<IActionResult> GetStats(
             [FromQuery] DateTime? startDate,
-            [FromQuery] DateTime? endDate)
+            [FromQuery] DateTime? endDate,
+            [FromQuery(Name = "from")] DateTime? from,
+            [FromQuery(Name = "to")] DateTime? to,
+            CancellationToken ct)
         {
-            var userId = GetUserIdString();
+            if (!TryGetUserId(out var userId))
+                return Unauthorized(new { error = "Missing or invalid user identity." });
 
-            if (string.IsNullOrWhiteSpace(userId))
-                return Unauthorized(new { error = "Missing user identity." });
+            var effectiveStart = startDate ?? from;
+            var effectiveEnd = endDate ?? to;
 
-            if (startDate.HasValue && endDate.HasValue && endDate.Value.Date < startDate.Value.Date)
-                return BadRequest(new { error = "endDate must be on/after startDate." });
+            if (effectiveStart.HasValue && effectiveEnd.HasValue && effectiveEnd.Value.Date < effectiveStart.Value.Date)
+                return BadRequest(new { error = "end date must be on/after start date." });
 
-            var stats = await _fitnessService.GetStatsAsync(userId, startDate, endDate);
+            var stats = await _fitnessService.GetStatsAsync(userId, effectiveStart, effectiveEnd, ct);
             return Ok(stats);
         }
 
-        private static ActivityResponse ToResponse(Activity a)
+        [HttpGet("activity-types")]
+        public async Task<IActionResult> GetActivityTypes(CancellationToken ct)
         {
-            return new ActivityResponse
-            {
-                Id = a.Id,
-                Type = a.Type,
-                DurationMinutes = a.DurationMinutes,
-                Date = a.Date
-            };
+            if (!TryGetUserId(out var userId))
+                return Unauthorized(new { error = "Missing or invalid user identity." });
+
+            var types = await _fitnessService.GetActivityTypesAsync(userId, ct);
+            return Ok(types);
         }
+
+        private static ActivityResponse ToResponse(Activity a) => new()
+        {
+            Id = a.Id,
+            Type = a.Type,
+            DurationMinutes = a.DurationMinutes,
+            Date = a.Date
+        };
     }
 }

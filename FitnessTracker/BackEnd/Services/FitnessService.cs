@@ -7,19 +7,16 @@ namespace FitnessTracker.BackEnd.Services
 {
     public class FitnessService : IFitnessService
     {
-        private readonly FitnessDbContext _db; // <-- change if your DbContext is named differently
+        private readonly FitnessDbContext _db;
 
-        public FitnessService(FitnessDbContext db) // <-- change if your DbContext is named differently
+        public FitnessService(FitnessDbContext db)
         {
             _db = db;
         }
 
-        public string GetStatus()
-        {
-            return "Fitness service is working";
-        }
+        public string GetStatus() => "Fitness service is working";
 
-        public List<Activity> GetActivities(int userId, string? type, DateTime? from, DateTime? to)
+        public async Task<List<Activity>> GetActivitiesAsync(int userId, string? type, DateTime? from, DateTime? to, CancellationToken ct)
         {
             IQueryable<Activity> query = _db.Activities
                 .AsNoTracking()
@@ -37,19 +34,19 @@ namespace FitnessTracker.BackEnd.Services
                 query = query.Where(a => a.Date <= inclusiveEnd);
             }
 
-            return query
+            return await query
                 .OrderByDescending(a => a.Date)
-                .ToList();
+                .ToListAsync(ct);
         }
 
-        public Activity? GetActivityById(int userId, int id)
+        public async Task<Activity?> GetActivityByIdAsync(int userId, int id, CancellationToken ct)
         {
-            return _db.Activities
+            return await _db.Activities
                 .AsNoTracking()
-                .FirstOrDefault(a => a.Id == id && a.UserId == userId);
+                .FirstOrDefaultAsync(a => a.Id == id && a.UserId == userId, ct);
         }
 
-        public Activity AddActivity(int userId, CreateActivityRequest request)
+        public async Task<Activity> AddActivityAsync(int userId, CreateActivityRequest request, CancellationToken ct)
         {
             var activity = new Activity
             {
@@ -59,16 +56,16 @@ namespace FitnessTracker.BackEnd.Services
                 Date = request.Date
             };
 
-            _db.Activities.Add(activity);
-            _db.SaveChanges();
+            await _db.Activities.AddAsync(activity, ct);
+            await _db.SaveChangesAsync(ct);
 
             return activity;
         }
 
-        public bool UpdateActivity(int userId, int id, CreateActivityRequest request)
+        public async Task<bool> UpdateActivityAsync(int userId, int id, CreateActivityRequest request, CancellationToken ct)
         {
-            var activity = _db.Activities
-                .FirstOrDefault(a => a.Id == id && a.UserId == userId);
+            var activity = await _db.Activities
+                .FirstOrDefaultAsync(a => a.Id == id && a.UserId == userId, ct);
 
             if (activity == null)
                 return false;
@@ -77,31 +74,28 @@ namespace FitnessTracker.BackEnd.Services
             activity.DurationMinutes = request.DurationMinutes;
             activity.Date = request.Date;
 
-            _db.SaveChanges();
+            await _db.SaveChangesAsync(ct);
             return true;
         }
 
-        public bool DeleteActivity(int userId, int id)
+        public async Task<bool> DeleteActivityAsync(int userId, int id, CancellationToken ct)
         {
-            var activity = _db.Activities
-                .FirstOrDefault(a => a.Id == id && a.UserId == userId);
+            var activity = await _db.Activities
+                .FirstOrDefaultAsync(a => a.Id == id && a.UserId == userId, ct);
 
             if (activity == null)
                 return false;
 
             _db.Activities.Remove(activity);
-            _db.SaveChanges();
+            await _db.SaveChangesAsync(ct);
             return true;
         }
 
-        public async Task<FitnessStatsDto> GetStatsAsync(string userId, DateTime? startDate, DateTime? endDate)
+        public async Task<FitnessStatsDto> GetStatsAsync(int userId, DateTime? startDate, DateTime? endDate, CancellationToken ct)
         {
-            if (!int.TryParse(userId, out int parsedUserId))
-                throw new ArgumentException("Invalid user id.");
-
             IQueryable<Activity> query = _db.Activities
                 .AsNoTracking()
-                .Where(a => a.UserId == parsedUserId);
+                .Where(a => a.UserId == userId);
 
             if (startDate.HasValue)
                 query = query.Where(a => a.Date >= startDate.Value);
@@ -114,18 +108,15 @@ namespace FitnessTracker.BackEnd.Services
 
             var items = await query
                 .Select(a => new { a.Type, a.DurationMinutes })
-                .ToListAsync();
+                .ToListAsync(ct);
 
             int totalMinutes = items.Sum(x => x.DurationMinutes);
             int count = items.Count;
             double avg = count == 0 ? 0 : Math.Round((double)totalMinutes / count, 2);
 
             var minutesByType = items
-                .GroupBy(x => x.Type ?? "Unknown")
-                .ToDictionary(
-                    g => g.Key,
-                    g => g.Sum(x => x.DurationMinutes)
-                );
+                .GroupBy(x => string.IsNullOrWhiteSpace(x.Type) ? "Unknown" : x.Type!)
+                .ToDictionary(g => g.Key, g => g.Sum(x => x.DurationMinutes));
 
             return new FitnessStatsDto(
                 totalMinutes,
@@ -135,6 +126,17 @@ namespace FitnessTracker.BackEnd.Services
                 startDate,
                 endDate
             );
+        }
+
+        public async Task<List<string>> GetActivityTypesAsync(int userId, CancellationToken ct)
+        {
+            return await _db.Activities
+                .AsNoTracking()
+                .Where(a => a.UserId == userId && !string.IsNullOrWhiteSpace(a.Type))
+                .Select(a => a.Type!)
+                .Distinct()
+                .OrderBy(t => t)
+                .ToListAsync(ct);
         }
     }
 }

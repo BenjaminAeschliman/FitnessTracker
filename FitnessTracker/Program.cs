@@ -3,17 +3,17 @@ using FitnessTracker.BackEnd.Data;
 using FitnessTracker.BackEnd.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
-using System.Text;
 using Microsoft.OpenApi.Models;
-using System.IO;
-
-
+using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
+// --------------------
+// Services
+// --------------------
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
+
 builder.Services.AddSwaggerGen(c =>
 {
     c.SwaggerDoc("v1", new OpenApiInfo
@@ -48,14 +48,23 @@ builder.Services.AddSwaggerGen(c =>
     });
 });
 
-
+// --------------------
+// Database
+// --------------------
 var dbPath = Path.Combine(builder.Environment.ContentRootPath, "BackEnd", "fitness.db");
+
 builder.Services.AddDbContext<FitnessDbContext>(options =>
-    options.UseSqlite($"Data Source={dbPath}"));
+    options.UseSqlite($"Data Source={dbPath}")
+);
 
-
+// --------------------
+// Dependency Injection
+// --------------------
 builder.Services.AddScoped<IFitnessService, FitnessService>();
 
+// --------------------
+// Authentication
+// --------------------
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
@@ -74,37 +83,35 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         };
     });
 
-
 var app = builder.Build();
 
-// Swagger (dev only)
+// --------------------
+// Middleware
+// --------------------
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
     app.UseSwaggerUI();
 }
 
-// Serve index.html from wwwroot and other static files
+// Serve frontend
 app.UseDefaultFiles();
 app.UseStaticFiles();
 
 app.UseHttpsRedirection();
 
 app.UseAuthentication();
-
 app.UseAuthorization();
 
 app.MapControllers();
+
+// --------------------
+// Database migration
+// --------------------
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<FitnessDbContext>();
-
-    Console.WriteLine("DB file: " + db.Database.GetDbConnection().DataSource);
-    Console.WriteLine("Pending migrations: " + string.Join(", ", db.Database.GetPendingMigrations()));
-
     db.Database.Migrate();
 }
-
-
 
 app.Run();

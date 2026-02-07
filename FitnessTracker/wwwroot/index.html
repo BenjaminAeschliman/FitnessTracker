@@ -4,7 +4,6 @@
     <meta charset="utf-8" />
     <title>FitnessTracker</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-
     <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
@@ -12,33 +11,30 @@
 
     <p id="message"></p>
 
-    <!-- LOGGED OUT VIEW -->
     <div id="loggedOutView">
         <h2>Register</h2>
         <form id="registerForm" class="row">
             <input id="registerEmail" type="email" placeholder="Email" required />
             <input id="registerPassword" type="password" placeholder="Password" required />
-            <button id="registerFormBtn" type="submit">Register</button>
+            <button type="submit">Register</button>
         </form>
 
         <h2>Login</h2>
         <form id="loginForm" class="row">
             <input id="loginEmail" type="email" placeholder="Email" required />
             <input id="loginPassword" type="password" placeholder="Password" required />
-            <button id="loginFormBtn" type="submit">Login</button>
+            <button type="submit">Login</button>
         </form>
     </div>
 
     <hr />
 
-    <!-- LOGGED IN VIEW -->
     <div id="loggedInView" style="display:none;">
         <p>
             Logged in as: <strong id="currentUserEmail">unknown</strong>
             <button id="logoutBtn" type="button">Logout</button>
         </p>
 
-        <!-- STATS -->
         <section class="card">
             <h2>Stats</h2>
 
@@ -69,11 +65,23 @@
             <div id="typeBreakdown"></div>
         </section>
 
-        <!-- ACTIVITIES -->
         <section class="card">
             <h2>Activities</h2>
 
-            <button id="loadActivitiesBtn" type="button">Load Activities</button>
+            <div class="row">
+                <label class="muted" for="activityFilterType">Type:</label>
+                <select id="activityFilterType">
+                    <option value="">All</option>
+                </select>
+
+                <button id="loadActivitiesBtn" type="button">Load Activities</button>
+                <button id="clearFiltersBtn" type="button">Clear Filters</button>
+            </div>
+
+            <div class="muted" style="margin-top:6px;">
+                Uses the same date range as Stats (Start/End Date).
+            </div>
+
             <div id="activitiesLoading" class="hint" style="display:none;">Loading…</div>
 
             <table id="activitiesTable" style="display:none;">
@@ -88,14 +96,13 @@
             </table>
         </section>
 
-        <!-- ADD ACTIVITY -->
         <section class="card">
             <h3>Add Activity</h3>
             <form id="activityForm" class="row">
                 <input id="activityType" placeholder="Type (Run / Walk / Lift)" required />
                 <input id="activityMinutes" type="number" placeholder="Minutes" required />
                 <input id="activityDate" type="date" required />
-                <button id="addActivityBtn" type="submit">Add Activity</button>
+                <button type="submit">Add Activity</button>
             </form>
 
             <pre id="activityResult"></pre>
