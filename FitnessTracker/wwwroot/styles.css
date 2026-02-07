@@ -90,3 +90,12 @@ button {
 .type-name {
     font-weight: 600;
 }
+
+/* -------- Empty / muted states -------- */
+
+.muted {
+    color: #777;
+    font-size: 0.95rem;
+    font-style: italic;
+    margin-top: 8px;
+}

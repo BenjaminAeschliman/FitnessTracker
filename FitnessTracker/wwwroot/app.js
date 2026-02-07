@@ -1,8 +1,10 @@
 ﻿const API_BASE = "";
 
 // ---------- helpers ----------
-function setMessage(text) {
-    document.getElementById("message").textContent = text || "";
+function setMessage(text, isError = false) {
+    const el = document.getElementById("message");
+    el.textContent = text || "";
+    el.classList.toggle("error", !!isError);
 }
 
 function saveToken(token) {
@@ -48,6 +50,7 @@ async function sendRequest(url, method, body, needsAuth) {
 
     const text = await response.text();
     let data = null;
+
     try {
         data = text ? JSON.parse(text) : null;
     } catch {
@@ -55,7 +58,12 @@ async function sendRequest(url, method, body, needsAuth) {
     }
 
     if (!response.ok) {
-        throw new Error(data?.error || data?.message || (typeof data === "string" ? data : "") || `${response.status} ${response.statusText}`);
+        throw new Error(
+            data?.error ||
+            data?.message ||
+            (typeof data === "string" ? data : "") ||
+            `${response.status} ${response.statusText}`
+        );
     }
 
     return data;
@@ -71,8 +79,27 @@ async function loadActivities() {
     tbody.innerHTML = "";
     table.style.display = "none";
 
+    // Ensure empty-state element exists
+    let empty = document.getElementById("activitiesEmpty");
+    if (!empty) {
+        empty = document.createElement("div");
+        empty.id = "activitiesEmpty";
+        empty.className = "muted";
+        empty.style.marginTop = "8px";
+        table.insertAdjacentElement("afterend", empty);
+    }
+    empty.style.display = "none";
+    empty.textContent = "";
+
     try {
         const activities = await sendRequest("/api/fitness/activities", "GET", null, true);
+
+        if (!activities || activities.length === 0) {
+            empty.textContent = "No activities found.";
+            empty.style.display = "block";
+            setMessage("No activities to show.");
+            return;
+        }
 
         for (const a of activities) {
             const tr = document.createElement("tr");
@@ -84,10 +111,15 @@ async function loadActivities() {
             tbody.appendChild(tr);
         }
 
-        table.style.display = activities.length ? "table" : "none";
-        setMessage("");
+        table.style.display = "table";
+        setMessage(`Loaded ${activities.length} activit${activities.length === 1 ? "y" : "ies"}.`);
     } catch (err) {
-        setMessage("Failed to load activities: " + err.message);
+        setMessage("Failed to load activities: " + err.message, true);
+
+        if (err.message === "Not logged in") {
+            clearToken();
+            setLoggedInUI(false);
+        }
     } finally {
         loading.style.display = "none";
     }
@@ -130,7 +162,7 @@ async function loadStats() {
         const keys = Object.keys(dict);
 
         if (keys.length === 0) {
-            breakdown.textContent = "No activity types for this range.";
+            breakdown.innerHTML = `<div class="muted">No activity types for this range.</div>`;
         } else {
             for (const type of keys) {
                 const div = document.createElement("div");
@@ -138,34 +170,45 @@ async function loadStats() {
                 breakdown.appendChild(div);
             }
         }
+
+        setMessage("Stats loaded.");
     } catch (err) {
         statsError.textContent = err.message;
+
+        if (err.message === "Not logged in") {
+            clearToken();
+            setLoggedInUI(false);
+            setMessage("Session expired. Please log in again.", true);
+        }
     } finally {
         statsLoading.style.display = "none";
     }
 }
 
+
+// ---------- DOM ----------
 document.addEventListener("DOMContentLoaded", () => {
-    setMessage("✅ app.js loaded and DOMContentLoaded fired");
 
     // REGISTER
     document.getElementById("registerForm").addEventListener("submit", async (e) => {
         e.preventDefault();
+
         const email = document.getElementById("registerEmail").value;
         const password = document.getElementById("registerPassword").value;
 
         try {
             await sendRequest("/auth/register", "POST", { email, password }, false);
-            setMessage("✅ Registered successfully. Now log in.");
+            setMessage("Registered successfully. Now log in.");
             e.target.reset();
         } catch (err) {
-            setMessage("❌ Register failed: " + err.message);
+            setMessage("Register failed: " + err.message, true);
         }
     });
 
     // LOGIN
     document.getElementById("loginForm").addEventListener("submit", async (e) => {
         e.preventDefault();
+
         const email = document.getElementById("loginEmail").value;
         const password = document.getElementById("loginPassword").value;
 
@@ -177,14 +220,13 @@ document.addEventListener("DOMContentLoaded", () => {
             saveToken(token);
             saveEmail(email);
             setLoggedInUI(true);
-            setMessage("✅ Logged in.");
+            setMessage("Logged in.");
             e.target.reset();
 
-            // auto-load
             loadActivities();
             loadStats();
         } catch (err) {
-            setMessage("❌ Login failed: " + err.message);
+            setMessage("Login failed: " + err.message, true);
         }
     });
 
@@ -199,7 +241,7 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById("loadActivitiesBtn").addEventListener("click", loadActivities);
     document.getElementById("loadStatsBtn").addEventListener("click", loadStats);
 
-    // ADD ACTIVITY (prevents refresh)
+    // ADD ACTIVITY
     document.getElementById("activityForm").addEventListener("submit", async (e) => {
         e.preventDefault();
 
@@ -211,26 +253,31 @@ document.addEventListener("DOMContentLoaded", () => {
         resultBox.textContent = "Saving...";
 
         try {
-            const data = await sendRequest(
+            await sendRequest(
                 "/api/fitness/activities",
                 "POST",
                 { type, durationMinutes, date },
                 true
             );
 
-            resultBox.textContent = JSON.stringify(data, null, 2);
-            setMessage("✅ Activity added.");
+            resultBox.textContent = "";
+            setMessage("Activity added.");
             e.target.reset();
 
             loadActivities();
             loadStats();
         } catch (err) {
             resultBox.textContent = "";
-            setMessage("❌ Failed to add activity: " + err.message);
+            setMessage("Failed to add activity: " + err.message, true);
+
+            if (err.message === "Not logged in") {
+                clearToken();
+                setLoggedInUI(false);
+            }
         }
     });
 
-    // PAGE LOAD
+    // INITIAL LOAD
     setLoggedInUI(!!getToken());
     if (getToken()) {
         loadActivities();
