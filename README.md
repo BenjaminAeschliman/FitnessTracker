@@ -166,10 +166,10 @@ Passwords are stored as a hash + salt (no plaintext storage).
 ## Screenshots
 
 ### Login / Register
-![Login Screen](Docs/Screenshots/login.png)
+![Login Screen](FitnessTracker/Docs/Screenshots/login.png)
 
 ### Dashboard
-![Dashboard](Docs/Screenshots/dashboard.png)
+![Dashboard](FitnessTracker/Docs/Screenshots/dashboard.png)
 
 ---
 
